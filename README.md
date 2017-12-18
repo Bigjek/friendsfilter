@@ -1,4 +1,4 @@
-## LoftSchool example project
+## Друго фильтр VK
 
 ### Доступные команды
 
