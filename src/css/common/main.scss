@@ -14,6 +14,8 @@
         display: flex;
         justify-content: space-between;
         padding: 15px;
+        border-top-left-radius: 10px;
+        border-top-right-radius: 10px;
     }
     &__title{
         color: white;
@@ -35,12 +37,13 @@
     &__item{
         width: 50%;
         text-align: center;
-        padding: 10px 0;
+        padding: 10px 15px;
         background: #f0f0f0;
     }
     &__input{
         border-radius: 20px;
         padding: 6px 28px;
+        width: 100%;
     }
     &__icon{
         position: absolute;
@@ -51,6 +54,8 @@
         display: flex;
         justify-content: flex-end;
         padding: 7px;
+        border-bottom-left-radius: 10px;
+        border-bottom-right-radius: 10px;
     }
     &__save{
         background: #ff8663;
@@ -61,5 +66,56 @@
     }
     &__content{
         background: white;
+        display: flex;
+    }
+}
+.filter-info{
+    width: 50%;
+    padding: 15px;
+    &:first-child{
+        border-right: 1px solid #f0f0f0;
+    }
+    &__title{
+        color: #000;
+    }
+    &__list{
+        padding: 0;
+        list-style: none;
+        max-height: 325px;
+        overflow-y: scroll;
+    }
+}
+.friend{
+    &-item{
+        display: flex;
+        border-bottom: 1px solid #f0f0f0;
+        padding: 6px;
+        align-items: center;
+        position: relative;
+        &:hover{
+            background: #f0f0f0;
+        }
+        &__image{
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            overflow: hidden;
+            display: inline-block;
+        }
+        &__icon{
+            width: 100%;
+            
+        }
+        &__button{
+            height: 15px;
+            position: absolute;
+            right: 6px;
+            &-icon{
+                fill: #c4c4c4; 
+            }
+        }
+        &__name{
+            padding: 0 6px;
+        }
     }
 }
