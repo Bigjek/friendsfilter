@@ -82,7 +82,8 @@
         padding: 0;
         list-style: none;
         max-height: 325px;
-        overflow-y: scroll;
+        overflow-y: auto;
+        height: 100%;
     }
 }
 .friend{
@@ -117,5 +118,14 @@
         &__name{
             padding: 0 6px;
         }
+        &__content{
+            display: flex;
+            align-items: center;
+        }
+    }
+}
+.delete{
+    svg{
+        transform: rotate(45deg);
     }
 }
