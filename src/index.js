@@ -1,188 +1,193 @@
-const myHbsRight =  require('../RightList.hbs');
-const myHbsLeft = require('../LeftList.hbs');
-const myModuleApi = {
-    listRight: document.querySelector('.list-user-right'),
-    listLeft: document.querySelector('.list-user-left'),
-    searchLeft: document.querySelector('.input-user-left'),
-    searchRight: document.querySelector('.input-user-right'),
-    friendContent: document.querySelector('.filter-block__content'),
-    saveList: document.querySelector('.filter-block__save'),
-    init: function () {
-        let self = this;
-        if(!localStorage.dataInfo || localStorage.dataInfo.length < 12){
-            localStorage.clear();
-            self.authVK()
-                .then(()=>{
-                    self.api('friends.get', {fields:'photo_100'})
-                    .then((self)=>{
-                        let item = [];
-                        for(let i in self.items){
-                            item.push({userName: `${self.items[i].first_name} ${self.items[i].last_name}` , photo: `${self.items[i].photo_100}`})
-                        }
-                        userListLeft.list = item;
-                        myModuleApi.listUpdate(userListLeft, sortingRight);
-                    });
-                })
-        }
-    },
-    authVK: function() {
-        return new Promise((resolve,reject) => {
-            VK.init({
-                apiId: 6302893
+const listI =  require('../listIndex.hbs');
+let myMap, clusterer, myPlacemark = [], myList = {list:[]}, name, address, balloonText, dateForm, coords;
+
+// Создание метки.
+function createPlacemark(coords) {
+    return new ymaps.Placemark(coords, {
+        iconCaption: 'поиск...',
+        name: name,
+        address: address,
+        description: balloonText,		
+        date: dateForm
+    }, {
+        preset: 'islands#violetStretchyIcon',
+        draggable: false
+    });
+}
+
+// Определяем адрес по координатам (обратное геокодирование).
+function getAddress(coords) {
+    myPlacemark.properties.set('iconCaption', 'поиск...');
+    ymaps.geocode(coords).then(function (res) {
+        var firstGeoObject = res.geoObjects.get(0);
+        myPlacemark.properties
+            .set({
+                // Формируем строку с данными об объекте.
+                iconCaption: [
+                    // Название населенного пункта или вышестоящее административно-территориальное образование.
+                    firstGeoObject.getLocalities().length ? firstGeoObject.getLocalities() : firstGeoObject.getAdministrativeAreas(),
+                    // Получаем путь до топонима, если метод вернул null, запрашиваем наименование здания.
+                    firstGeoObject.getThoroughfare() || firstGeoObject.getPremise()
+                ].filter(Boolean).join(', '),
+                // В качестве контента балуна задаем строку с адресом объекта.
+                balloonContent: firstGeoObject.getAddressLine()
             });
-            VK.Auth.login(data => {
-                if(data.session){
-                    resolve();
-                }else {
-                    reject(new Error('Не удалось авторизоваться.'));
-                }
-            },2)
-        })
-    },
-    api: function(method,params) {
-        return new Promise((resolve,reject)=>{
-            params.v = '5.69';
-            VK.api(method,params,(data)=>{
-                if(data.error) {
-                    reject(data.error)
-                }else {
-                    resolve(data.response);
-                }
-            })
+    });
+}
+
+function getAddressNew(coords) {
+    ymaps.geocode(coords).then(function (res) {
+        var firstGeoObject = res.geoObjects.get(0).properties._data.text;
+        myModuleMap.newAddressForm(firstGeoObject); 
+    });
+}
+
+function getClickPosition(x, y) {
+    myModuleMap.mod.style = "display: block; position: absolute; left:" + x + "px; top:" + y + "px";
+}
+
+function setPositionModal(e){
+    //получить координаты мышки на экране
+    var x = (event.layerX == undefined ? event.offsetX : event.pageX) + 1;
+    var y = (event.layerY == undefined ? event.offsetY : event.pageY) + 1;
+    getClickPosition(x, y);
+}
+
+function getFormattedDate(){
+    var d = new Date();
+    d = d.getFullYear() + "." + ('0' + (d.getMonth() + 1)).slice(-2) + "." + ('0' + d.getDate()).slice(-2) + " " + ('0' + d.getHours()).slice(-2) + ":" + ('0' + d.getMinutes()).slice(-2) + ":" + ('0' + d.getSeconds()).slice(-2);
+    return d;
+}
+
+const myModuleMap = {
+    commentList: document.querySelector('.comment__list'),
+    closeForm: document.querySelector('.modal__title-close'),
+    mod: document.querySelector('.modal'),
+    addressForm: document.querySelector('.modal__title-name'),
+    subForm: document.getElementById('marker_sub'),
+    myMapSearch: function (){
+        // Слушаем клик на карте.
+        myMap.events.add('click', function (e) {
+            coords = e.get('coords');
+            // Если метка уже создана
+            if (myPlacemark) {
+                coords = e.get('coords');
+                setPositionModal(e);
+            }     
+            getAddressNew(coords);   
+        });
+        myMap.geoObjects.events.add('click', function (e) {
+            e.preventDefault();            
+            myList = {list:[]};
+            var object = e.get('target').properties._data;
+            if(object.geoObjects){
+                object.geoObjects.forEach(function(element) {
+                    myList.list.push({
+                        name: element.properties._data.name,
+                        address: element.properties._data.address,
+                        description: element.properties._data.description,	
+                        date: element.properties._data.date,	
+                    })
+                }, this);
+                myModuleMap.commentList.innerHTML = listI(myList);
+            }else{
+                myList.list.push({
+                    name: object.name,
+                    address: object.address,
+                    description: object.description,	
+                    date: object.date,	
+                })
+                myModuleMap.commentList.innerHTML = listI(myList);
+                setPositionModal(e);
+            }            
         });
     },
-    listRightStart : function () {
-        return localStorage.dataInfo ? JSON.parse(localStorage.dataInfo) : undefined;
+    loadMap: function(){
+        return new Promise(resolve => ymaps.ready(resolve)) 
+            .then(points => {
+                // Создаем собственный макет с информацией о выбранном геообъекте.
+                var customItemContentLayout = ymaps.templateLayoutFactory.createClass(
+                    // Флаг "raw" означает, что данные вставляют "как есть" без экранирования html.
+                    '<strong class=ballon_header>{{ properties.address|raw }}</strong></br>' +
+                    '<div class=ballon_body><a href="#" class="ballon_click">{{ properties.iconCaption|raw }}</a></br>{{ properties.description|raw }}</div>' +
+                    '<div class=ballon_footer>{{ properties.balloonContentFooter|raw }}</div>'
+                );
+                myMap = new ymaps.Map('map', {
+                    center: [55.76, 37.64], // Москва
+                    zoom: 10
+                }, {
+                    searchControlProvider: 'yandex#search'
+                });
+                clusterer = new ymaps.Clusterer({
+                    preset: 'islands#invertedVioletClusterIcons',
+                    clusterDisableClickZoom: true,
+                    openBalloonOnClick: true,
+                    // Устанавливаем стандартный макет балуна кластера "Карусель".
+                    clusterBalloonContentLayout: 'cluster#balloonCarousel',
+                    // Устанавливаем собственный макет.
+                    clusterBalloonItemContentLayout: customItemContentLayout,
+                    // Устанавливаем режим открытия балуна. 
+                    // В данном примере балун никогда не будет открываться в режиме панели.
+                    clusterBalloonPanelMaxMapArea: 0,
+                    // Устанавливаем размеры макета контента балуна (в пикселях).
+                    clusterBalloonContentLayoutWidth: 200,
+                    clusterBalloonContentLayoutHeight: 130,
+                    // Устанавливаем максимальное количество элементов в нижней панели на одной странице
+                    clusterBalloonPagerSize: 5
+                });
+                myMap.geoObjects.add(clusterer);
+                this.myMapSearch();
+            })
+            .catch(e => alert('Ошибка: ' + e.message));
     },
-    addU: function(elem,list) {
-        list.push(elem)
+    geocode: function (address) {
+        return ymaps.geocode(address)
+            .then(result => {
+                const points = result.geoObjects.toArray();
+    
+                if (points.length) {
+                    return points[0].geometry.getCoordinates();
+                }
+            });
     },
-    deleteU: function(elem,list) {
-        for (let i = 0; i < list.length;i++){
-            if(list[i].userName === elem) {
-                list.splice(i, 1);
-            }
-        }
+    init: function () {
+        this.loadMap();
     },
-    dataF: function(elem) {
-        let photo = elem.closest('li').children[0].children[0].children[0].getAttribute('src');
-        let user = elem.closest('li').children[0].children[1].textContent;
-        return {'userName':user,'photo':photo};
+    getValueForm: function(){
+        name = document.getElementById("marker_name").value;
+        address = document.getElementById("marker_address").value;
+        balloonText = document.getElementById("marker_balloontext").value;
+        dateForm = getFormattedDate();
     },
-    listUpdate: function (listL,listR) {
-        this.listRight.innerHTML = myHbsRight(listR);
-        this.listLeft.innerHTML = myHbsLeft(listL);
+    removeValueForm: function(){
+        document.getElementById("marker_name").value = "";
+        document.getElementById("marker_address").value = "";
+        document.getElementById("marker_balloontext").value = "";
+        myModuleMap.commentList.innerHTML = "Отзывов пока нет...";
     },
-    check: function (full, chunk) {
-        return (full.toLowerCase().indexOf(chunk.toLowerCase()) === -1) ? false : true;
+    newAddressForm: function(e){
+        this.addressForm.innerHTML = e;
+        myModuleMap.commentList.innerHTML = "Отзывов пока нет...";
     }
 }
 
-function handleDragEnter(e) {
+myModuleMap.closeForm.addEventListener('click', function(){
+    myModuleMap.mod.removeAttribute('style');
+});
+
+myModuleMap.subForm.addEventListener('click', function(e){
+	myModuleMap.getValueForm();
+    myPlacemark = createPlacemark(coords);
+    //добавляем в группировку
+    clusterer.add(myPlacemark);
+    getAddress(coords);
+    myModuleMap.mod.removeAttribute('style');
+    myModuleMap.removeValueForm();
+});
+
+$(document).on('click' ,'.ballon_click', function (e) {
     e.preventDefault();
-    return true;
-}
-function handleDragOver(e) {
-    e.preventDefault();
-    return true;
-}
-function handleDragDrop(e) {
-    let data = JSON.parse(e.dataTransfer.getData('text/html'));
-    let blockPos = e.target.closest('ul').classList[1];
-    if(blockPos ==='list-user-left' && blockPos !==data[0]){
-        myModuleApi.deleteU(data[1].userName,listRightStart.list);
-        myModuleApi.addU(data[1],userListLeft.list)
-    }
-    if (blockPos ==='list-user-right' && blockPos !==data[0]) {
-        myModuleApi.deleteU(data[1].userName,userListLeft.list);
-        myModuleApi.addU(data[1],listRightStart.list)
-    }
-    let eventL = new Event("keyup");
-    let eventR = new Event("keyup");
-    myModuleApi.searchLeft.dispatchEvent(eventL);
-    myModuleApi.searchRight.dispatchEvent(eventR);
-    myModuleApi.listUpdate(sortingLeft,sortingRight);
-    return false;
-}
+    setPositionModal(e);
+});
 
-function go(e) {
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/html', JSON.stringify([e.target.closest('ul').classList[1],myModuleApi.dataF(e.target)]))
-}
-
-let listRightStart = {list:[]}, userListLeft = {list:[]}, sortingLeft = {list:[]}, sortingRight = {list:[]};
-
-userListLeft = localStorage.dataL ? JSON.parse(localStorage.dataL) : userListLeft;
-listRightStart =localStorage.dataInfo ? JSON.parse(localStorage.dataInfo) : listRightStart;
-sortingLeft.list = userListLeft.list;
-sortingRight.list = listRightStart.list;
-myModuleApi.listUpdate(sortingLeft,sortingRight);
-
-myModuleApi.friendContent.addEventListener('click',function (e) {
-    let leftElem = e.target.closest('.add'),
-        rightElem = e.target.closest('.delete'),
-        eventL = new Event("keyup"),
-        eventR = new Event("keyup");
-    if(leftElem){
-        let data = myModuleApi.dataF(leftElem);
-        myModuleApi.deleteU(data.userName,userListLeft.list);
-        myModuleApi.addU(data,listRightStart.list)
-    }
-    if(rightElem){
-        let data = myModuleApi.dataF(rightElem);
-        myModuleApi.deleteU(data.userName,listRightStart.list);
-        myModuleApi.addU(data,userListLeft.list)
-    }
-    myModuleApi.searchLeft.dispatchEvent(eventL);
-    myModuleApi.searchRight.dispatchEvent(eventR);
-    myModuleApi.listUpdate(sortingLeft, sortingRight);
-})
-myModuleApi.listLeft.addEventListener('dragover',handleDragOver, false);
-myModuleApi.listLeft.addEventListener('drop',handleDragDrop, false);
-myModuleApi.listLeft.addEventListener('dragenter',handleDragEnter, false);
-myModuleApi.listRight.addEventListener('dragover',handleDragOver, false);
-myModuleApi.listRight.addEventListener('drop',handleDragDrop, false);
-myModuleApi.listRight.addEventListener('dragenter',handleDragEnter, false);
-
-myModuleApi.saveList.addEventListener('click',function () {
-    localStorage.dataL = JSON.stringify(userListLeft);
-    localStorage.dataInfo = JSON.stringify(listRightStart);
-})
-
-myModuleApi.friendContent.addEventListener('mousedown',function (e) {
-    if(e.target.closest('li')){
-        e.target.closest('li').addEventListener('dragstart', go, false);
-    }
-})
-
-myModuleApi.searchLeft.addEventListener('keyup', function (e) {
-    sortingLeft.list = [];
-    if(e.target.value.length){
-        for (let i = 0; i < userListLeft.list.length; i++) {
-            if(myModuleApi.check(userListLeft.list[i].userName,e.target.value)){
-                sortingLeft.list.push(userListLeft.list[i]);
-            }
-        }
-        myModuleApi.listUpdate(sortingLeft,sortingRight);
-    }else {
-        sortingLeft.list = userListLeft.list
-        myModuleApi.listUpdate(sortingLeft,sortingRight);
-    }
-})
-
-myModuleApi.searchRight.addEventListener('keyup', function (e) {
-    sortingRight.list = [];
-    if(e.target.value.length){
-        for (let i = 0; i < listRightStart.list.length; i++) {
-            if(myModuleApi.check(listRightStart.list[i].userName,e.target.value)){
-                sortingRight.list.push(listRightStart.list[i]);
-            }
-        }
-        myModuleApi.listUpdate(sortingLeft,sortingRight);
-    }else {
-        sortingRight.list = listRightStart.list
-        myModuleApi.listUpdate(sortingLeft,sortingRight);
-    }
-})
-
-window.onload = myModuleApi.init();
+window.onload = myModuleMap.init();
